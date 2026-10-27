@@ -229,12 +229,118 @@ const els = {
 	networkWarningSummary: $("#networkWarningSummary"),
 	networkWarningDetails: $("#networkWarningDetails"),
 	networkWarningJson: $("#networkWarningJson"),
-	networkWarningLocalBtn: $("#networkWarningLocalBtn")
+	networkWarningLocalBtn: $("#networkWarningLocalBtn"),
+	networkWarningDismissBtn: $("#networkWarningDismissBtn"),
+	bootIfSelector: $("#bootIfSelector"),
+	bootIfList: $("#bootIfList"),
+	bootIfConfirmBtn: $("#bootIfConfirmBtn"),
+	bootLoadingStatus: $("#bootLoadingStatus"),
+	bootLoadingTrack: $("#bootLoadingTrack"),
+	interfaceSelect: $("#interfaceSelect"),
+	currentIpBadge: $("#currentIpBadge")
 };
+
+let bootSelectedDevice = "en1";
+
+async function initInterfaceSelectionBoot() {
+	try {
+		const resp = await fetch(`/__interfaces?_t=${Date.now()}`, { cache: "no-store" });
+		if (!resp.ok) throw new Error("interfaces api unavailable");
+		const data = await resp.json();
+		const list = Array.isArray(data.interfaces) ? data.interfaces : [];
+		bootSelectedDevice = data.current || (list[0] && list[0].device) || "en1";
+
+		if (els.interfaceSelect) {
+			els.interfaceSelect.innerHTML = list.map((item) =>
+				`<option value="${escapeHtml(item.device)}"${item.device === bootSelectedDevice ? " selected" : ""}>${escapeHtml(item.label)}</option>`
+			).join("");
+		}
+
+		if (els.bootIfList && list.length) {
+			renderBootIfList(list);
+			return;
+		}
+	} catch (e) {
+		// 若未通过 server_2345.py 启动，直接回退默认检测
+	}
+	await confirmBootInterfaceAndStart(bootSelectedDevice);
+}
+
+function renderBootIfList(list) {
+	els.bootIfList.innerHTML = list.map((item) => {
+		const active = item.device === bootSelectedDevice ? " is-selected" : "";
+		const badgeText = item.kind === "physical" ? "物理直连" : (item.kind === "tun" ? "虚拟隧道" : "系统路由");
+		const badgeClass = item.kind === "physical" ? "ok" : "idle";
+		return `<button type="button" class="boot-if-item${active}" data-if-dev="${escapeHtml(item.device)}">
+			<div class="boot-if-item-main">
+				<span class="boot-if-item-name">${escapeHtml(item.name)} (${escapeHtml(item.device)})</span>
+				<span class="boot-if-item-meta">IP: ${escapeHtml(item.ip)} · 网关: ${escapeHtml(item.gateway)}</span>
+			</div>
+			<span class="tag ${badgeClass}">${badgeText}</span>
+		</button>`;
+	}).join("");
+
+	els.bootIfList.querySelectorAll("[data-if-dev]").forEach((btn) => {
+		btn.addEventListener("click", () => {
+			bootSelectedDevice = btn.getAttribute("data-if-dev") || "en1";
+			els.bootIfList.querySelectorAll("[data-if-dev]").forEach((b) => {
+				b.classList.toggle("is-selected", b === btn);
+			});
+		});
+		btn.addEventListener("dblclick", () => {
+			bootSelectedDevice = btn.getAttribute("data-if-dev") || "en1";
+			confirmBootInterfaceAndStart(bootSelectedDevice);
+		});
+	});
+}
+
+async function confirmBootInterfaceAndStart(device) {
+	if (els.bootIfSelector) els.bootIfSelector.hidden = true;
+	if (els.bootLoadingStatus) els.bootLoadingStatus.hidden = false;
+	if (els.bootLoadingTrack) els.bootLoadingTrack.hidden = false;
+	bootLoading.startedAt = performance.now();
+	scheduleBootLoadingProgress();
+
+	if (device) {
+		if (els.interfaceSelect) els.interfaceSelect.value = device;
+		try {
+			await fetch(`/__select_interface?device=${encodeURIComponent(device)}&_t=${Date.now()}`, { cache: "no-store" });
+		} catch (e) {}
+	}
+	detectNetwork();
+}
+
+async function switchNetworkInterface(device) {
+	if (!device) return;
+	if (els.currentIpBadge) {
+		els.currentIpBadge.className = "tag idle";
+		els.currentIpBadge.textContent = `切换 ${device} 检测中…`;
+	}
+	if (els.networkWarningOverlay) {
+		els.networkWarningOverlay.classList.remove("is-visible");
+	}
+	try {
+		await fetch(`/__select_interface?device=${encodeURIComponent(device)}&_t=${Date.now()}`, { cache: "no-store" });
+	} catch (e) {}
+	await detectNetwork();
+}
+
+function updateCurrentIpBadge() {
+	if (!els.currentIpBadge) return;
+	const v4 = state.network && state.network.ipv4;
+	if (v4 && v4.status === "done" && v4.ip) {
+		const ok = v4.allowed;
+		els.currentIpBadge.className = `tag ${ok ? "ok" : "warn"}`;
+		els.currentIpBadge.textContent = `出口: ${v4.ip} (${v4.country} · ${v4.preferredType})`;
+	} else {
+		els.currentIpBadge.className = "tag err";
+		els.currentIpBadge.textContent = "出口: 未获取到 IPv4";
+	}
+}
 
 // ==================== 开屏加载动画 ====================
 
-const BOOT_LOADING_MIN_VISIBLE = 800;
+const BOOT_LOADING_MIN_VISIBLE = 500;
 const bootLoading = {
 	active: true,
 	startedAt: performance.now(),
@@ -274,8 +380,8 @@ function finishBootLoading() {
 			window.setTimeout(() => {
 				if (overlay) overlay.classList.add("is-hidden");
 				bootLoading.active = false;
-				window.setTimeout(resolve, 580);
-			}, 320);
+				window.setTimeout(resolve, 400);
+			}, 260);
 		}, wait);
 	});
 }
@@ -283,8 +389,7 @@ function finishBootLoading() {
 document.addEventListener("DOMContentLoaded", () => {
 	bindEvents();
 	updateEditorMeta();
-	scheduleBootLoadingProgress();
-	detectNetwork();
+	initInterfaceSelectionBoot();
 	if ("ResizeObserver" in window) {
 		state.editorResizeObserver = new ResizeObserver(updateEditorMeta);
 		state.editorResizeObserver.observe(els.ipInput);
@@ -293,6 +398,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function bindEvents() {
 	els.themeToggleBtn.addEventListener("click", toggleThemeMode);
+	if (els.bootIfConfirmBtn) {
+		els.bootIfConfirmBtn.addEventListener("click", () => {
+			confirmBootInterfaceAndStart(bootSelectedDevice);
+		});
+	}
+	if (els.interfaceSelect) {
+		els.interfaceSelect.addEventListener("change", () => {
+			switchNetworkInterface(els.interfaceSelect.value);
+		});
+	}
+	if (els.networkWarningDismissBtn) {
+		els.networkWarningDismissBtn.addEventListener("click", () => {
+			els.networkWarningOverlay.classList.remove("is-visible");
+			if (els.interfaceSelect) els.interfaceSelect.focus();
+		});
+	}
 	els.domainImportBtn.addEventListener("click", importCfDomains);
 	els.ipInput.addEventListener("input", updateEditorMeta);
 	els.ipInput.addEventListener("scroll", syncEditorScroll);
@@ -464,6 +585,7 @@ async function refreshCnNetwork({ resetResults = false, stopRuns = false } = {})
 
 		renderNetworkCard("ipv4", state.network.ipv4);
 		renderNetworkCard("ipv6", state.network.ipv6);
+		updateCurrentIpBadge();
 		await loadLocations();
 		updateServiceStatus();
 
@@ -474,6 +596,7 @@ async function refreshCnNetwork({ resetResults = false, stopRuns = false } = {})
 		if (!allowed) showNetworkWarning();
 		return allowed;
 	} catch (error) {
+		updateCurrentIpBadge();
 		if (bootLoading.active) await finishBootLoading();
 		throw error;
 	} finally {
@@ -1064,14 +1187,17 @@ async function testLatency(address, timeout, run) {
 	for (let index = 0; index < LATENCY_MEASURE_COUNT; index++) {
 		if (run && run.stopped) throw new Error("已停止");
 		const started = performance.now();
+		let rtt = 0;
 		try {
 			const response = await fetchWithTimeout(url, { method: "GET", timeout, run });
 			if (!response.ok) throw new Error("GET 不可用");
+			const headerRtt = Number(response.headers.get("X-RTT-Ms"));
 			await response.text();
+			rtt = headerRtt > 0 ? Math.round(headerRtt) : Math.round(performance.now() - started);
 		} catch (error) {
 			continue;
 		}
-		samples.push(Math.max(1, Math.round(performance.now() - started)));
+		samples.push(Math.max(1, rtt));
 	}
 	if (!samples.length) throw new Error("GET 测速失败");
 	const latency = Math.min(...samples);
@@ -2156,12 +2282,15 @@ async function fetchJsonFromEndpoint(endpoint, path, timeout, run) {
 
 function fetchWithTimeout(url, { method = "GET", timeout = 8000, run = null } = {}) {
 	const controller = new AbortController();
-	const timer = window.setTimeout(() => controller.abort(), timeout);
+	const timer = window.setTimeout(() => controller.abort(), timeout + 500);
 	if (run) {
 		run.controllers.add(controller);
 		if (run.stopped) controller.abort();
 	}
-	return fetch(url, {
+	const targetUrl = /^https?:\/\//i.test(url)
+		? `/__direct_proxy?url=${encodeURIComponent(url)}&timeout=${encodeURIComponent(timeout)}`
+		: url;
+	return fetch(targetUrl, {
 		method,
 		cache: "no-store",
 		signal: controller.signal

@@ -1,0 +1,8 @@
+/*
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Content-Type
+  Access-Control-Expose-Headers: Content-Length, Content-Type
+  Access-Control-Max-Age: 86400
+  Content-Security-Policy: frame-ancestors *
+  Cross-Origin-Resource-Policy: cross-origin

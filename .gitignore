@@ -23,3 +23,6 @@ yarn.lock
 *.swo
 *~
 .idea/
+
+*.log
+.DS_Store

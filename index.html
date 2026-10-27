@@ -5,15 +5,22 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>BestCF 在线优选CF官方域名</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=if_select_c">
 </head>
 
 <body>
 	<div class="boot-loading" id="bootLoading" role="status" aria-live="polite">
 		<div class="boot-loading-card">
 			<div class="boot-loading-brand">BestCF</div>
-			<div class="boot-loading-status" id="bootLoadingStatus">正在检测网络环境…</div>
-			<div class="boot-loading-track" aria-hidden="true">
+			<div class="boot-if-selector" id="bootIfSelector">
+				<div class="boot-if-title">请选择本次测速使用的出网网口</div>
+				<div class="boot-if-list" id="bootIfList">正在扫描本机活跃网口…</div>
+				<div class="boot-if-actions">
+					<button class="btn" id="bootIfConfirmBtn" type="button">使用所选网口进入测速</button>
+				</div>
+			</div>
+			<div class="boot-loading-status" id="bootLoadingStatus" hidden>正在检测网络环境…</div>
+			<div class="boot-loading-track" id="bootLoadingTrack" aria-hidden="true" hidden>
 				<div class="boot-loading-bar" id="bootLoadingBar"></div>
 			</div>
 		</div>
@@ -36,7 +43,11 @@
 					<small>在线优选 · 仅支持 Cloudflare CDN 上可正常访问的网站域名，无法优选第三方「CF优选域名」</small>
 				</div>
 			</div>
-			<button class="icon-btn theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="切换配色"></button>
+			<div class="topbar-actions">
+				<span class="tag idle" id="currentIpBadge" title="当前选定网口的公网出口">出口检测中…</span>
+				<select class="select topbar-if-select" id="interfaceSelect" aria-label="出网网口切换" title="随时切换测速出网网卡"></select>
+				<button class="icon-btn theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="切换配色"></button>
+			</div>
 		</header>
 
 		<div class="layout">
@@ -158,7 +169,11 @@
 				<section class="panel" aria-labelledby="resultTitle">
 					<div class="panel-head">
 						<h2 class="panel-title" id="resultTitle">优选结果</h2>
-						<span class="tag idle" id="resultCount">0 个可用</span>
+						<div class="panel-head-actions">
+							<span class="tag idle" id="resultCount">0 个可用</span>
+							<button class="btn secondary" id="invertSelectBtn" type="button">反选</button>
+							<button class="btn secondary" id="clearSelectBtn" type="button">重置</button>
+						</div>
 					</div>
 					<div class="result-wrap">
 						<table>
@@ -195,10 +210,6 @@
 						</table>
 					</div>
 					<div class="result-actions">
-						<div class="result-actions-group">
-							<button class="btn secondary" id="invertSelectBtn" type="button">反选</button>
-							<button class="btn secondary" id="clearSelectBtn" type="button">重置</button>
-						</div>
 						<div class="result-actions-group">
 							<span class="tiny muted selection-status" id="selectionStatus">已选 0 个</span>
 							<button class="btn success" id="copyResultsBtn" type="button" disabled>
@@ -256,7 +267,8 @@
 					<pre class="network-warning-json" id="networkWarningJson"></pre>
 				</details>
 			</div>
-			<div class="network-warning-actions">
+			<div class="network-warning-actions" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+				<button class="btn" id="networkWarningDismissBtn" type="button">关闭弹窗 / 切换顶部网口</button>
 				<button class="btn btn-local-warning" id="networkWarningLocalBtn" type="button">使用本地优选项目</button>
 			</div>
 		</div>
@@ -281,7 +293,7 @@
 	<noscript>
 		<style>.boot-loading{display:none!important}</style>
 	</noscript>
-	<script src="script.js"></script>
+	<script src="script.js?v=if_select_c"></script>
 </body>
 
 </html>
