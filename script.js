@@ -271,10 +271,13 @@ function renderBootIfList(list) {
 		const active = item.device === bootSelectedDevice ? " is-selected" : "";
 		const badgeText = item.kind === "physical" ? "物理直连" : (item.kind === "tun" ? "虚拟隧道" : "系统路由");
 		const badgeClass = item.kind === "physical" ? "ok" : "idle";
+		const metaText = item.meta
+			? escapeHtml(item.meta)
+			: `IP: ${escapeHtml(item.ip)} · 网关: ${escapeHtml(item.gateway)}`;
 		return `<button type="button" class="boot-if-item${active}" data-if-dev="${escapeHtml(item.device)}">
 			<div class="boot-if-item-main">
 				<span class="boot-if-item-name">${escapeHtml(item.name)} (${escapeHtml(item.device)})</span>
-				<span class="boot-if-item-meta">IP: ${escapeHtml(item.ip)} · 网关: ${escapeHtml(item.gateway)}</span>
+				<span class="boot-if-item-meta">${metaText}</span>
 			</div>
 			<span class="tag ${badgeClass}">${badgeText}</span>
 		</button>`;
@@ -2320,3 +2323,70 @@ function friendlyError(error) {
 	if (error.name === "AbortError") return "请求超时或已停止";
 	return error.message || "操作失败";
 }
+
+
+// ==================== Demo Screenshot Mode (Zero Local/Public IP) ====================
+(function applyDemoModeIfRequested() {
+	const params = new URLSearchParams(window.location.search);
+	const demo = params.get("demo");
+	if (!demo) return;
+	const applyDemoState = () => {
+		const demoIfs = [
+			{ device: "en1", name: "Wi-Fi", meta: "物理网卡直连 · 绕过系统代理与虚拟隧道", kind: "physical", label: "Wi-Fi (en1 · 物理网卡直连)" },
+			{ device: "en0", name: "Ethernet", meta: "有线物理网卡 · 独立硬件网口直连", kind: "physical", label: "Ethernet (en0 · 有线物理网卡)" },
+			{ device: "utun5", name: "Shadowrocket TUN", meta: "虚拟代理隧道 · 经过系统 TUN 转发", kind: "tun", label: "Shadowrocket TUN (utun5 · 虚拟代理隧道)" },
+			{ device: "system", name: "系统默认路由", meta: "跟随系统默认路由表优先级", kind: "system", label: "系统默认路由 (跟随系统优先级)" }
+		];
+		bootSelectedDevice = "en1";
+		if (els.interfaceSelect) {
+			els.interfaceSelect.innerHTML = demoIfs.map(item =>
+				`<option value="${item.device}"${item.device === "en1" ? " selected" : ""}>${item.label}</option>`
+			).join("");
+		}
+		if (els.currentIpBadge) {
+			els.currentIpBadge.className = "tag ok";
+			els.currentIpBadge.textContent = "出口: CN · 电信优选 (物理直连)";
+		}
+		if (demo === "boot") {
+			const overlay = document.getElementById("bootLoading");
+			if (overlay) overlay.classList.remove("is-hidden");
+			if (els.bootIfSelector) els.bootIfSelector.hidden = false;
+			if (els.bootLoadingStatus) els.bootLoadingStatus.hidden = true;
+			if (els.bootLoadingTrack) els.bootLoadingTrack.hidden = true;
+			renderBootIfList(demoIfs);
+		} else if (demo === "main") {
+			const overlay = document.getElementById("bootLoading");
+			if (overlay) overlay.classList.add("is-hidden");
+			if (els.networkWarningOverlay) els.networkWarningOverlay.classList.remove("is-visible");
+			els.ipInput.value = [
+				"skk.moe:443",
+				"time.is:443",
+				"www.shopify.com:443",
+				"visa.com:443",
+				"icook.tw:443",
+				"ip.sb:443",
+				"japan.com:443",
+				"malaysia.com:443",
+				"russia.com:443",
+				"singapore.com:443",
+				"www.visa.cn:443",
+				"www.gov.ua:443"
+			].join("\n");
+			updateEditorMeta();
+			state.results = [
+				{ id: 1, address: "www.shopify.com:443", host: "www.shopify.com", port: 443, type: "电信优选", country: "US", colo: "SJC", latency: 148 },
+				{ id: 2, address: "visa.com:443", host: "visa.com", port: 443, type: "电信优选", country: "US", colo: "LAX", latency: 162 },
+				{ id: 3, address: "skk.moe:443", host: "skk.moe", port: 443, type: "电信优选", country: "NL", colo: "AMS", latency: 195 },
+				{ id: 4, address: "time.is:443", host: "time.is", port: 443, type: "电信优选", country: "DE", colo: "FRA", latency: 210 }
+			];
+			state.selectedIds = new Set([1, 2]);
+			els.latencyStatus.textContent = "优选完成，4 个可用";
+			els.latencyBtn.disabled = false;
+			setProgress(12, 12);
+			renderResults();
+		}
+	};
+	window.addEventListener("load", () => {
+		window.setTimeout(applyDemoState, 350);
+	});
+})();
